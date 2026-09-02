@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NexaSaleAI — Interactive Device Simulator</title>
+  <style>
+    :root {
+      --bg-gradient: radial-gradient(circle at top, #1e1b4b 0%, #0f172a 60%, #020617 100%);
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --accent-indigo: #6366f1;
+      --accent-indigo-glow: rgba(99, 102, 241, 0.35);
+      --accent-emerald: #10b981;
+      --accent-emerald-glow: rgba(16, 185, 129, 0.3);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --input-bg: rgba(15, 23, 42, 0.8);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif; }
+
+    body {
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 24px;
+      overflow-x: hidden;
+    }
+
+    .sim-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      max-width: 440px;
+      width: 100%;
+    }
+
+    /* Stepper Navigation */
+    .sim-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      width: 100%;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 6px;
+      border-radius: 14px;
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(12px);
+    }
+
+    .sim-tab {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 8px 4px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .sim-tab.active {
+      background: var(--accent-indigo);
+      color: #ffffff;
+      box-shadow: 0 4px 14px var(--accent-indigo-glow);
+    }
+
+    /* Phone Frame Structure */
+    .sim-phone {
+      width: 340px;
+      height: 610px;
+      background: #090d16;
+      border: 12px solid #1e293b;
+      border-radius: 44px;
+      box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* iOS Status Bar & Dynamic Island */
+    .status-bar {
+      height: 38px;
+      padding: 0 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      z-index: 20;
+    }
+
+    .dynamic-island {
+      width: 90px;
+      height: 20px;
+      background: #000;
+      border-radius: 20px;
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 25;
+    }
+
+    /* Panels Container */
+    .sim-viewport {
+      position: relative;
+      flex-grow: 1;
+      overflow: hidden;
+    }
+
+    .sim-panel {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 12px 20px 24px 20px;
+      opacity: 0;
+      transform: scale(0.97) translateY(12px);
+      pointer-events: none;
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .sim-panel.active {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+      pointer-events: auto;
+    }
+
+    /* Step 1: Form */
+    .badge-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(99, 102, 241, 0.15);
+      color: #818cf8;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      width: fit-content;
+    }
+
+    .form-title { font-size: 19px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.02em; }
+    .form-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 18px; line-height: 1.4; }
+    
+    .field-group { margin-bottom: 12px; }
+    .field-label { display: block; font-size: 11px; font-weight: 600; color: #cbd5e1; margin-bottom: 4px; }
+    
+    .sim-input, .sim-select {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--glass-border);
+      color: #fff;
+      padding: 11px 13px;
+      border-radius: 10px;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .sim-input:focus, .sim-select:focus {
+      border-color: var(--accent-indigo);
+    }
+
+    .sim-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      color: #fff;
+      border: none;
+      padding: 13px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+      box-shadow: 0 4px 16px var(--accent-indigo-glow);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .sim-btn:active { transform: scale(0.98); }
+
+    /* Step 2: WhatsApp Chat */
+    .chat-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--glass-border);
+      margin-bottom: 14px;
+    }
+    
+    .chat-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #10b981, #059669);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .chat-status-name { font-size: 12px; font-weight: 700; }
+    .chat-status-sub { font-size: 10px; color: var(--accent-emerald); }
+
+    .chat-box { display: flex; flex-direction: column; gap: 10px; flex-grow: 1; justify-content: flex-end; }
+    
+    .chat-bubble {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 14px;
+      font-size: 12px;
+      line-height: 1.45;
+      animation: popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .chat-bubble.out { background: #3b82f6; align-self: flex-end; border-bottom-right-radius: 3px; color: #fff; }
+    .chat-bubble.in { background: #1e293b; align-self: flex-start; border-bottom-left-radius: 3px; border: 1px solid var(--glass-border); color: #e2e8f0; }
+
+    .typing-indicator {
+      display: flex;
+      gap: 4px;
+      padding: 10px 14px;
+      background: #1e293b;
+      border-radius: 14px;
+      align-self: flex-start;
+      border-bottom-left-radius: 3px;
+      width: fit-content;
+    }
+
+    .dot { width: 5px; height: 5px; background: var(--text-muted); border-radius: 50%; animation: pulse 1s infinite alternate; }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+
+    /* Step 3: Voice AI */
+    .voice-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-grow: 1;
+      gap: 22px;
+      text-align: center;
+    }
+
+    .voice-avatar-glow {
+      position: relative;
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(16, 185, 129, 0.2));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid var(--accent-indigo);
+      box-shadow: 0 0 30px var(--accent-indigo-glow);
+    }
+
+    .voice-avatar-glow::after {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 1px dashed rgba(99, 102, 241, 0.4);
+      animation: rotateRing 12s linear infinite;
+    }
+
+    .voice-title { font-size: 15px; font-weight: 700; }
+    .voice-subtitle { font-size: 11px; color: var(--accent-emerald); display: flex; align-items: center; gap: 5px; justify-content: center; }
+    .live-dot { width: 6px; height: 6px; background: var(--accent-emerald); border-radius: 50%; animation: pulse 0.8s infinite alternate; }
+
+    .waveform { display: flex; gap: 5px; align-items: center; height: 44px; }
+    .wave-bar { width: 4px; height: 10px; background: var(--accent-indigo); border-radius: 3px; }
+    .waveform.playing .wave-bar { animation: soundWave 0.7s infinite ease-in-out alternate; }
+    .waveform.playing .wave-bar:nth-child(1) { animation-delay: 0.1s; }
+    .waveform.playing .wave-bar:nth-child(2) { animation-delay: 0.35s; }
+    .waveform.playing .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+    .waveform.playing .wave-bar:nth-child(4) { animation-delay: 0.45s; }
+    .waveform.playing .wave-bar:nth-child(5) { animation-delay: 0.15s; }
+
+    .voice-transcript {
+      font-size: 11px;
+      color: var(--text-muted);
+      background: rgba(15, 23, 42, 0.6);
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--glass-border);
+      max-width: 90%;
+      line-height: 1.4;
+    }
+
+    /* Step 4: Calendar Booking */
+    .success-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      height: 100%;
+      gap: 14px;
+    }
+
+    .success-card {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid var(--accent-emerald);
+      padding: 22px 18px;
+      border-radius: 20px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.15);
+      backdrop-filter: blur(10px);
+    }
+
+    .check-circle {
+      width: 52px;
+      height: 52px;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-emerald);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      margin: 0 auto 12px auto;
+      border: 1px solid var(--accent-emerald);
+    }
+
+    .booking-details {
+      background: #0f172a;
+      border: 1px solid var(--glass-border);
+      padding: 12px;
+      border-radius: 12px;
+      font-size: 11px;
+      line-height: 1.6;
+      text-align: left;
+      margin-top: 12px;
+      color: #cbd5e1;
+    }
+
+    /* Animations */
+    @keyframes popIn { from { opacity: 0; transform: translateY(8px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes pulse { from { opacity: 0.3; } to { opacity: 1; } }
+    @keyframes soundWave { from { height: 8px; } to { height: 40px; background: var(--accent-emerald); } }
+    @keyframes rotateRing { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div class="sim-wrapper">
+    <!-- Stepper Navigation -->
+    <div class="sim-tabs">
+      <button class="sim-tab active" onclick="setStep(1)">1. Enquiry</button>
+      <button class="sim-tab" onclick="setStep(2)">2. WhatsApp</button>
+      <button class="sim-tab" onclick="setStep(3)">3. Voice AI</button>
+      <button class="sim-tab" onclick="setStep(4)">4. Booking</button>
+    </div>
+
+    <!-- Phone Frame -->
+    <div class="sim-phone">
+      <div class="dynamic-island"></div>
+      
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>14:35</span>
+        <span style="display: flex; gap: 5px;"><span>5G</span><span>███</span></span>
+      </div>
+
+      <div class="sim-viewport">
+        <!-- Step 1: Form -->
+        <div class="sim-panel active" id="step-1">
+          <div class="badge-tag">Live Demo Sandbox</div>
+          <div class="form-title">Instant AI Enquiry</div>
+          <div class="form-desc">Select your industry niche to simulate an automated lead journey.</div>
+          
+          <div class="field-group">
+            <label class="field-label">Target Industry / Niche</label>
+            <select class="sim-select" id="nicheSelect" onchange="updateNicheState()">
+              <option value="boiler">HVAC & Boiler Emergency Repair</option>
+              <option value="plumbing">Plumbing & Drainage Services</option>
+              <option value="solar">Solar Panel Installation & Battery</option>
+              <option value="roofing">Roofing & Gutter Replacement</option>
+              <option value="legal">Family Law & Legal Consultation</option>
+              <option value="dental">Emergency Dental Clinic</option>
+              <option value="detailing">Automotive Detailing & Ceramic Coating</option>
+              <option value="security">Commercial CCTV & Security Systems</option>
+            </select>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">Prospect Name</label>
+            <input type="text" class="sim-input" id="prospectName" value="James" oninput="updateNicheState()">
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">UK Location / Postcode</label>
+            <input type="text" class="sim-input" id="prospectLocation" value="London, SW1A 1AA" oninput="updateNicheState()">
+          </div>
+
+          <button class="sim-btn" onclick="setStep(2)">Submit Lead Simulation →</button>
+        </div>
+
+        <!-- Step 2: WhatsApp Chat -->
+        <div class="sim-panel" id="step-2">
+          <div class="chat-header">
+            <div class="chat-avatar">🤖</div>
+            <div>
+              <div class="chat-status-name" id="chatTitle">NexaSale AI Agent</div>
+              <div class="chat-status-sub">● Online • Instant Responder</div>
+            </div>
+          </div>
+
+          <div class="chat-box">
+            <div class="chat-bubble out" id="userMsgBubble">
+              Hi, I need urgent assistance with my boiler in London.
+            </div>
+            
+            <div class="typing-indicator" id="typingIndicator">
+              <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            </div>
+            
+            <div class="chat-bubble in" id="aiResponseBubble" style="display: none;">
+              <!-- Dynamic JS insertion -->
+            </div>
+          </div>
+
+          <button class="sim-btn" style="margin-top: 14px;" onclick="setStep(3)">Test Voice Qualification →</button>
+        </div>
+
+        <!-- Step 3: Voice AI Call -->
+        <div class="sim-panel" id="step-3">
+          <div class="voice-wrapper">
+            <div class="voice-avatar-glow">
+              <span style="font-size: 36px;">🎙️</span>
+            </div>
+
+            <div>
+              <div class="voice-title" id="voiceTitle">NexaSale AI Voice Agent</div>
+              <div class="voice-subtitle"><span class="live-dot"></span> Inbound Call Connected</div>
+            </div>
+
+            <div class="waveform playing" id="waveform">
+              <div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div>
+            </div>
+
+            <div class="voice-transcript" id="voiceTranscript">
+              "Connecting human-sounding AI voice..."
+            </div>
+
+            <button class="sim-btn" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); box-shadow: 0 4px 16px rgba(239,68,68,0.3);" onclick="stopVoiceDemo()">
+              Confirm & Book Appointment →
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 4: Calendar Confirmation -->
+        <div class="sim-panel" id="step-4">
+          <div class="success-container">
+            <div class="success-card">
+              <div class="check-circle">✓</div>
+              <div style="font-weight: 700; font-size: 17px; margin-bottom: 4px;">Appointment Confirmed</div>
+              <div style="font-size: 11px; color: var(--accent-emerald); font-weight: 600;">Pushed to GHL Calendar via Webhook</div>
+
+              <div class="booking-details" id="bookingDetailsCard">
+                <!-- Dynamic JS content -->
+              </div>
+            </div>
+
+            <button class="sim-btn" onclick="setStep(1)">← Reset Simulation</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const synth = window.speechSynthesis;
+    let selectedVoice = null;
+
+    // Niche Data Dictionary
+    const nicheConfigs = {
+      boiler: {
+        title: "HVAC & Boiler Emergency",
+        userMsg: "Hi, my boiler stopped heating and I need an urgent inspection.",
+        aiMsg: "Hi {name}! I can dispatch a certified gas-safe engineer to {location}. Would you like to confirm a 30-second voice qualification now?",
+        voiceScript: "Hello {name}, thanks for reaching out to NexaSale Heating. I can see you need an urgent boiler check in {location}. Does two PM tomorrow work for your site visit?",
+        bookingService: "Gas-Safe Boiler Diagnostic Visit"
+      },
+      plumbing: {
+        title: "Emergency Plumbing & Drainage",
+        userMsg: "Hello, I have a leaking pipe under the sink that needs fixing.",
+        aiMsg: "Hello {name}! We have plumbers available in {location}. Let's get a call scheduled to confirm your address.",
+        voiceScript: "Hi {name}, NexaSale Plumbing here. I saw your inquiry about the pipe repair in {location}. Shall I book our emergency plumber for tomorrow morning?",
+        bookingService: "Emergency Drainage & Leak Assessment"
+      },
+      solar: {
+        title: "Solar & Battery Storage",
+        userMsg: "Interested in getting a quote for 4kW solar panel installation.",
+        aiMsg: "Great choice {name}! Solar inquiries in {location} qualify for zero VAT. Let's briefly qualify your roof layout.",
+        voiceScript: "Hello {name}, this is NexaSale Solar. I noticed you are looking for solar panels in {location}. Is your roof orientation mostly south or west facing?",
+        bookingService: "Solar Feasibility & Roof Assessment"
+      },
+      roofing: {
+        title: "Roofing & Guttering Specialist",
+        userMsg: "Need a quote for replacing damaged roof tiles.",
+        aiMsg: "Hi {name}! Our roofing team is working near {location} this week. Can our AI qualify your job details?",
+        voiceScript: "Hi {name}, calling from NexaSale Roofing regarding your tile repair in {location}. Can we send an inspector out tomorrow at three PM?",
+        bookingService: "Roof Inspection & Tile Estimate"
+      },
+      legal: {
+        title: "Family Law & Legal Consultation",
+        userMsg: "Looking for a confidential consultation regarding commercial contracts.",
+        aiMsg: "Welcome {name}. All legal inquiries are 100% confidential. Let's arrange your initial solicitor consultation.",
+        voiceScript: "Good afternoon {name}. This is NexaSale Legal Advisors. I am reserving a thirty-minute introductory consultation for you in {location}. Does Thursday suit you?",
+        bookingService: "30-Min Confidential Legal Consultation"
+      },
+      dental: {
+        title: "Emergency Dental Clinic",
+        userMsg: "I need an emergency appointment for tooth pain today.",
+        aiMsg: "Hi {name}! We reserve priority emergency slots for patients in {location}. Let's verify your slot.",
+        voiceScript: "Hello {name}, NexaSale Dental Emergency Desk here. We have an open slot at our clinic near {location} at four PM today. Should I reserve it for you?",
+        bookingService: "Same-Day Emergency Dental Examination"
+      },
+      detailing: {
+        title: "Automotive Detailing & Coating",
+        userMsg: "How much for full ceramic coating and interior deep clean?",
+        aiMsg: "Hi {name}! We provide mobile detailing across {location}. Let's lock in your vehicle package.",
+        voiceScript: "Hey {name}, NexaSale Auto Detailing here! I saw you want ceramic paint protection in {location}. Are you free Friday morning for our mobile team?",
+        bookingService: "Full Ceramic Coating & Mobile Detail"
+      },
+      security: {
+        title: "Commercial CCTV & Alarms",
+        userMsg: "Need a CCTV security system installed for our warehouse.",
+        aiMsg: "Hello {name}! We design custom commercial security systems in {location}. Let's book a site survey.",
+        voiceScript: "Hi {name}, NexaSale Commercial Security calling. I can schedule our engineer to complete a full security site survey in {location} tomorrow morning.",
+        bookingService: "Commercial Security Site Survey"
+      }
+    };
+
+    // Load Best Available Voice
+    function loadVoices() {
+      if (!synth) return;
+      const voices = synth.getVoices();
+      
+      // Filter for high-quality British/English human voices
+      selectedVoice = voices.find(v => 
+        (v.lang === 'en-GB' || v.lang === 'en_GB') && 
+        (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Online') || v.name.includes('Daniel') || v.name.includes('Serena'))
+      ) || voices.find(v => v.lang.startsWith('en-GB')) 
+        || voices.find(v => v.lang.startsWith('en')) 
+        || voices[0];
+    }
+
+    if (synth) {
+      synth.onvoiceschanged = loadVoices;
+      loadVoices();
+    }
+
+    function getState() {
+      const nicheKey = document.getElementById('nicheSelect').value;
+      const name = document.getElementById('prospectName').value || "Harrison";
+      const location = document.getElementById('prospectLocation').value || "London";
+      const config = nicheConfigs[nicheKey];
+
+      return {
+        name,
+        location,
+        title: config.title,
+        userMsg: config.userMsg.replace('{name}', name).replace('{location}', location),
+        aiMsg: config.aiMsg.replace('{name}', name).replace('{location}', location),
+        voiceScript: config.voiceScript.replace('{name}', name).replace('{location}', location),
+        bookingService: config.bookingService
+      };
+    }
+
+    function updateNicheState() {
+      const state = getState();
+      document.getElementById('chatTitle').innerText = state.title;
+      document.getElementById('voiceTitle').innerText = state.title + " AI";
+      document.getElementById('userMsgBubble').innerText = state.userMsg;
+    }
+
+    function setStep(stepNum) {
+      const state = getState();
+
+      // Navigation tabs active toggle
+      document.querySelectorAll('.sim-tab').forEach((tab, idx) => {
+        tab.classList.toggle('active', idx + 1 === stepNum);
+      });
+
+      // Viewport panels active toggle
+      document.querySelectorAll('.sim-panel').forEach((panel, idx) => {
+        panel.classList.toggle('active', idx + 1 === stepNum);
+      });
+
+      if (synth) synth.cancel();
+
+      // Step 2 Logic: Simulated WhatsApp Typing
+      if (stepNum === 2) {
+        document.getElementById('typingIndicator').style.display = 'flex';
+        document.getElementById('aiResponseBubble').style.display = 'none';
+        
+        setTimeout(() => {
+          document.getElementById('typingIndicator').style.display = 'none';
+          const aiBubble = document.getElementById('aiResponseBubble');
+          aiBubble.innerText = state.aiMsg;
+          aiBubble.style.display = 'block';
+        }, 1100);
+      }
+
+      // Step 3 Logic: Human-Sounding Voice AI
+      if (stepNum === 3) {
+        speakHumanVoice(state.voiceScript);
+      }
+
+      // Step 4 Logic: Dynamic Calendar Render
+      if (stepNum === 4) {
+        document.getElementById('bookingDetailsCard').innerHTML = `
+          <strong>Client:</strong> ${state.name}<br>
+          <strong>Service:</strong> ${state.bookingService}<br>
+          <strong>Location:</strong> ${state.location}<br>
+          <strong>Status:</strong> <span style="color: #10b981;">● Synced to GHL Calendar</span>
+        `;
+      }
+    }
+
+    function speakHumanVoice(text) {
+      if (!synth) return;
+      
+      const transcriptEl = document.getElementById('voiceTranscript');
+      const waveform = document.getElementById('waveform');
+      transcriptEl.innerText = `"${text}"`;
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      if (selectedVoice) utterance.voice = selectedVoice;
+      
+      // Natural speech cadence settings
+      utterance.rate = 0.95;  // Slightly slower for realistic clarity
+      utterance.pitch = 1.0;  // Standard natural tone
+
+      utterance.onstart = () => waveform.classList.add('playing');
+      utterance.onend = () => waveform.classList.remove('playing');
+
+      synth.speak(utterance);
+    }
+
+    function stopVoiceDemo() {
+      if (synth) synth.cancel();
+      document.getElementById('waveform').classList.remove('playing');
+      setStep(4);
+    }
+
+    // Initialize state on load
+    updateNicheState();
+  </script>
+</body>
+</html>
